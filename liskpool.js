@@ -39,36 +39,34 @@ async function broadcastPayments(_config, _payments, _passphrases, _passphrasesF
                 Cycle through payments
             */
 			var transactionsObject = _payments.transactions;
-			//logger.debug("Transactions: " + JSON.stringify(transactionsObject));
 			var transactionsPendingObject = _payments.transactionsPending;
 			var donationsObject = _payments.donations;
-			//logger.debug("Donations: " + JSON.stringify(donationsObject));
 			var donationsPercentageObject = _payments.donationsPercentage;
 			var transactionsRequest = {};
 			var transactionsRequestKey = 'transactions';
 			transactionsRequest[transactionsRequestKey] = [];
-			//Send Transactions Pending
+			//Create Transactions
 			for (var key in transactionsObject) {
 				if (transactionsObject[key].recipientId && transactionsObject[key].amount) {
 					var transaction = ripa.transaction.createTransaction(transactionsObject[key].recipientId, transactionsObject[key].amount, _payments.MESSAGE_1, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
 					transactionsRequest[transactionsRequestKey].push(transaction);
 				}
 			}
-			//Send Transactions Pending
+			//Create Transactions Pending
 			for (var key in transactionsPendingObject) {
 				if (transactionsPendingObject[key].recipientId && transactionsPendingObject[key].amount) {
 					var transaction = ripa.transaction.createTransaction(transactionsPendingObject[key].recipientId, transactionsPendingObject[key].amount, _payments.MESSAGE_1, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
 					transactionsRequest[transactionsRequestKey].push(transaction);
 				}
 			}
-			//Send Donations
+			//Create Donations
 			for (var key in donationsObject) {
 				if (donationsObject[key].recipientId && donationsObject[key].amount) {
 					var transaction = ripa.transaction.createTransaction(donationsObject[key].recipientId, donationsObject[key].amount, _payments.MESSAGE_2, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
 					transactionsRequest[transactionsRequestKey].push(transaction);
 				}
 			}
-			//Send Donations Percentage
+			//Create Donations Percentage
 			for (var key in donationsPercentageObject) {
 				if (donationsPercentageObject[key].recipientId && donationsPercentageObject[key].amount) {
 					var transaction = ripa.transaction.createTransaction(donationsPercentageObject[key].recipientId, donationsPercentageObject[key].amount, _payments.MESSAGE_2, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
@@ -76,7 +74,7 @@ async function broadcastPayments(_config, _payments, _passphrases, _passphrasesF
 				}
 			}
 			/*
-				Send transaction
+				Send transactions
 			*/
 			var send = false;
 			if (_autosave) {
@@ -112,7 +110,6 @@ async function broadcastPayments(_config, _payments, _passphrases, _passphrasesF
 		logger.error("ERROR: payments file is empty");
 	}
 }
-
 
 async function pool() {
 
@@ -184,7 +181,6 @@ async function pool() {
 				}
 				if ((balance > 0.0) && (balance < config.minpayout)) {
 					log.accounts[address].pending += balance;
-					continue
 				} else {
 					log.accounts[address].received += balance;
 					payments.transactions.push({ recipientId: address, amount: balance * 100000000 });
