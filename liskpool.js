@@ -1,22 +1,45 @@
 const fs = require('fs');
 const readlineSync = require('readline-sync');
 const request = require('request-promise');
+const HEADER_VERSION = require('./package.json').version;
 const DEFAULT_CONFIG = 'config.json';
 const DEFAULT_POOLLOGS = 'docs/poollogs.json';
 const DEFAULT_PAYMENTS = 'payments.json';
+const DEFAULT_PASSPHRASES = 'passphrases.json';
 var logger = require('winston');
-logger.level = 'info';
+logger.level = 'debug';
 var config = require('./' + DEFAULT_CONFIG);
 var poollogs = require('./' + DEFAULT_POOLLOGS);
 var payments = require('./' + DEFAULT_PAYMENTS);
+var passphrases = require('./' + DEFAULT_PASSPHRASES);
 
 pool();
+
+async function broadcastPayments(_config, _payments, _passphrases, _passphrasesFilename) {
+
+	logger.info('Passphrases Filename: ' + _passphrasesFilename);
+	logger.info('API endpoint: %s', _config.node);
+	if (_payments !== null) {
+		logger.debug('Payments array: %s', JSON.stringify(payments, null, 4));
+		var uri = _config.node + _config.GET_NET_HASH_ENDPOINT;
+		var nethashResponse = await request.get({url: uri,  json: true,	method: 'GET',headers: {
+            'Content-Type': _config.HEADER_CONTENT_TYPE,
+            'os': _config.HEADER_OS,
+            'version': HEADER_VERSION,
+            'port': _config.HEADER_PORT,
+            'nethash': 'wrong-nethash'}
+		});
+		logger.debug('NetHash: ' + JSON.stringify(nethashResponse, null, 4));
+	}
+}
+
 
 async function pool() {
 	
 	var configFilename = DEFAULT_CONFIG;
 	var poollogsFilename = DEFAULT_POOLLOGS;
 	var paymentsFilename = DEFAULT_PAYMENTS;
+	var passphrasesFilename = DEFAULT_PASSPHRASES;
 	var autosave = false;
 	for (let j = 0; j < process.argv.length; j++) {  
 		logger.debug(j + ' -> ' + (process.argv[j]));
@@ -45,7 +68,15 @@ async function pool() {
 			//load custom payments file
 			paymentsFilename = config.paymentsFile;
 			var paymentsFile = fs.readFileSync('./' + config.paymentsFile);
-			payments = JSON.parse(poollogsFile);
+			payments = JSON.parse(paymentsFile);
+		}
+	}
+	if (config.secret) {
+		if (config.secret !== DEFAULT_PASSPHRASES) {
+			//load custom passphrases file
+			passphrasesFilename = config.secret;
+			var passphrasesFile = fs.readFileSync('./' + config.secret);
+			passphrases = JSON.parse(passphrasesFile);
 		}
 	}
 	logger.info('Config Filename: ' + configFilename);
@@ -103,6 +134,7 @@ async function pool() {
 			if (autosave) {
 				save = true;
 			} else {
+				logger.info('Poollogs File: ' + JSON.stringify(log, null, 4))
 				var reply = readlineSync.question('Do You want to save the file? ');
 				if (reply.toLowerCase() === 'y') {
 					save = true;
@@ -114,6 +146,7 @@ async function pool() {
 				//write payments.json file
 				saveLog(payments, paymentsFilename);
 			}
+			broadcastPayments(config, payments, passphrases, passphrasesFilename);
 		} else {
 			logger.info('Nothing to distribute, exiting...');
 		} 
@@ -189,22 +222,3 @@ async function estimatePayouts(_conf, _log) {
 	logger.debug('Result estimatePayouts(): ' + JSON.stringify(result, null, 4));
 	return result;
 }
-
-	
-/*
-	
-def pool ():			
-
-	if len (sys.argv) > 1 and sys.argv[1] == '-y':
-		print ('Saving...')
-		saveLog (log)
-	else:
-		yes = input ('save? y/n: ')
-		if yes == 'y':
-			saveLog (log)
-			
-			
-
-if __name__ == "__main__":
-	pool ()
-*/
