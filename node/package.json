@@ -1,0 +1,35 @@
+{
+  "name": "ripa-pool",
+  "version": "1.0.0",
+  "description": "RIPA sharing pool",
+  "main": "payments.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "jquery": "^3.3.1",
+    "ripajs": "git://github.com/RipaEx/ripa-js.git#master",
+    "kapuwrapper": "^0.1.2",
+    "request": "^2.83.0",
+    "winston": "^2.4.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "node payments.js",
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RipaEx/ripa-pool.git"
+  },
+  "keywords": [
+    "ripa-pool",
+    "sharing"
+  ],
+  "author": "Giovanni Silvestri <gsit80@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RipaEx/ripa-pool/issues"
+  },
+  "homepage": "https://github.com/RipaEx/ripa-pool#readme"
+}
