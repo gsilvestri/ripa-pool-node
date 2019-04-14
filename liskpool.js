@@ -1,4 +1,5 @@
 const fs = require('fs');
+const ripa = require('ripajs');
 const readlineSync = require('readline-sync');
 const request = require('request-promise');
 const HEADER_VERSION = require('./package.json').version;
@@ -15,33 +16,112 @@ var passphrases = require('./' + DEFAULT_PASSPHRASES);
 
 pool();
 
-async function broadcastPayments(_config, _payments, _passphrases, _passphrasesFilename) {
+async function broadcastPayments(_config, _payments, _passphrases, _passphrasesFilename, _autosave) {
 
 	logger.info('Passphrases Filename: ' + _passphrasesFilename);
 	logger.info('API endpoint: %s', _config.node);
 	if (_payments !== null) {
 		logger.debug('Payments array: %s', JSON.stringify(payments, null, 4));
 		var uri = _config.node + _config.GET_NET_HASH_ENDPOINT;
-		var nethashResponse = await request.get({url: uri,  json: true,	method: 'GET',headers: {
-            'Content-Type': _config.HEADER_CONTENT_TYPE,
-            'os': _config.HEADER_OS,
-            'version': HEADER_VERSION,
-            'port': _config.HEADER_PORT,
-            'nethash': 'wrong-nethash'}
+		var nethashResponse = await request.get({
+			url: uri, json: true, method: 'GET', headers: {
+				'Content-Type': _config.HEADER_CONTENT_TYPE,
+				'os': _config.HEADER_OS,
+				'version': HEADER_VERSION,
+				'port': _config.HEADER_PORT,
+				'nethash': 'wrong-nethash'
+			}
 		});
 		logger.debug('NetHash: ' + JSON.stringify(nethashResponse, null, 4));
+		if (nethashResponse && nethashResponse.success && (nethashResponse.nethash === _config.MAIN_NET_NETHASH)) {
+			logger.info('Network NetHash: ' + nethashResponse.nethash);
+            /*
+                Cycle through payments
+            */
+			var transactionsObject = _payments.transactions;
+			//logger.debug("Transactions: " + JSON.stringify(transactionsObject));
+			var transactionsPendingObject = _payments.transactionsPending;
+			var donationsObject = _payments.donations;
+			//logger.debug("Donations: " + JSON.stringify(donationsObject));
+			var donationsPercentageObject = _payments.donationsPercentage;
+			var transactionsRequest = {};
+			var transactionsRequestKey = 'transactions';
+			transactionsRequest[transactionsRequestKey] = [];
+			//Send Transactions Pending
+			for (var key in transactionsObject) {
+				if (transactionsObject[key].recipientId && transactionsObject[key].amount) {
+					var transaction = ripa.transaction.createTransaction(transactionsObject[key].recipientId, transactionsObject[key].amount, _payments.MESSAGE_1, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
+					transactionsRequest[transactionsRequestKey].push(transaction);
+				}
+			}
+			//Send Transactions Pending
+			for (var key in transactionsPendingObject) {
+				if (transactionsPendingObject[key].recipientId && transactionsPendingObject[key].amount) {
+					var transaction = ripa.transaction.createTransaction(transactionsPendingObject[key].recipientId, transactionsPendingObject[key].amount, _payments.MESSAGE_1, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
+					transactionsRequest[transactionsRequestKey].push(transaction);
+				}
+			}
+			//Send Donations
+			for (var key in donationsObject) {
+				if (donationsObject[key].recipientId && donationsObject[key].amount) {
+					var transaction = ripa.transaction.createTransaction(donationsObject[key].recipientId, donationsObject[key].amount, _payments.MESSAGE_2, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
+					transactionsRequest[transactionsRequestKey].push(transaction);
+				}
+			}
+			//Send Donations Percentage
+			for (var key in donationsPercentageObject) {
+				if (donationsPercentageObject[key].recipientId && donationsPercentageObject[key].amount) {
+					var transaction = ripa.transaction.createTransaction(donationsPercentageObject[key].recipientId, donationsPercentageObject[key].amount, _payments.MESSAGE_2, _passphrases.PASSPHRASE, _passphrases.SECOND_PASSPHRASE);
+					transactionsRequest[transactionsRequestKey].push(transaction);
+				}
+			}
+			/*
+				Send transaction
+			*/
+			var send = false;
+			if (_autosave) {
+				send = true;
+			} else {
+				logger.info(JSON.stringify(transactionsRequest, null, 4));
+				var reply = readlineSync.question('Do You want to send the transactions? ');
+				if (reply.toLowerCase() === 'y') {
+					send = true;
+				}
+			}
+			if (send) {
+				var transactionsResponse = await request({
+                    url: _config.node + _config.TRANSACTIONS_ENDPOINT,
+                    json: transactionsRequest,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': _config.nethash.HEADER_CONTENT_TYPE,
+                        'os': _config.nethash.HEADER_OS,
+                        'version': HEADER_VERSION,
+                        'port': _config.nethash.HEADER_PORT,
+                        'nethash': _config.nethash
+                    }
+                });
+				logger.info('Transactions Response: ' + JSON.stringify(transactionsResponse, null, 4));
+			} else {
+				logger.info("Not sending transactions. Exit.");
+			}
+		} else {
+			logger.error("ERROR: nethash is wrong");
+		}
+	} else {
+		logger.error("ERROR: payments file is empty");
 	}
 }
 
 
 async function pool() {
-	
+
 	var configFilename = DEFAULT_CONFIG;
 	var poollogsFilename = DEFAULT_POOLLOGS;
 	var paymentsFilename = DEFAULT_PAYMENTS;
 	var passphrasesFilename = DEFAULT_PASSPHRASES;
 	var autosave = false;
-	for (let j = 0; j < process.argv.length; j++) {  
+	for (let j = 0; j < process.argv.length; j++) {
 		logger.debug(j + ' -> ' + (process.argv[j]));
 		if (process.argv[j] === '-c') {
 			configFilename = process.argv[j + 1];
@@ -100,34 +180,34 @@ async function pool() {
 				var address = payouts[i].address;
 				var balance = payouts[i].balance;
 				if (!log.accounts[address] && (balance != 0.0)) {
-					log.accounts[address] = {pending: 0.0, received: 0.0 };
+					log.accounts[address] = { pending: 0.0, received: 0.0 };
 				}
 				if ((balance > 0.0) && (balance < config.minpayout)) {
 					log.accounts[address].pending += balance;
 					continue
 				} else {
 					log.accounts[address].received += balance;
-					payments.transactions.push({recipientId: address, amount: balance * 100000000});
+					payments.transactions.push({ recipientId: address, amount: balance * 100000000 });
 				}
 			}
 			for (var y in log.accounts) {
-				var amountPending = log.accounts[y].pending; 
+				var amountPending = log.accounts[y].pending;
 				if (amountPending > config.minpayout) {
-					payments.transactionsPending.push({recipientId: y, amount: amountPending * 100000000});
+					payments.transactionsPending.push({ recipientId: y, amount: amountPending * 100000000 });
 					log.accounts[y].received += amountPending;
 					log.accounts[y].pending = 0.0;
 				}
 			}
 			if (config.donations) {
 				for (var y in config.donations) {
-					payments.donations.push({recipientId: y, amount: log.accounts[y] * 100000000});
-				}	
+					payments.donations.push({ recipientId: y, amount: log.accounts[y] * 100000000 });
+				}
 			}
 			if (config.donationspercentage) {
 				for (var y in config.donationspercentage) {
 					var am = forged * config.donationspercentage[y] / 100;
-					payments.donationsPercentage.push({recipientId: y, amount: am * 100000000});
-				}	
+					payments.donationsPercentage.push({ recipientId: y, amount: am * 100000000 });
+				}
 			}
 			log.lastpayout = Math.floor(Date.now() / 1000);
 			var save = false;
@@ -146,10 +226,10 @@ async function pool() {
 				//write payments.json file
 				saveLog(payments, paymentsFilename);
 			}
-			broadcastPayments(config, payments, passphrases, passphrasesFilename);
+			broadcastPayments(config, payments, passphrases, passphrasesFilename, autosave);
 		} else {
 			logger.info('Nothing to distribute, exiting...');
-		} 
+		}
 	} else {
 		logger.info('Nothing to distribute, exiting...');
 	}
@@ -164,8 +244,8 @@ function saveLog(_file, _fileName) {
 }
 
 async function estimatePayouts(_conf, _log) {
-	
-	var result = {payouts: {}, log: {}, forged: {}};
+
+	var result = { payouts: {}, log: {}, forged: {} };
 	if (_conf.coin) {
 		var rew = 0;
 		var payouts = [];
@@ -177,20 +257,20 @@ async function estimatePayouts(_conf, _log) {
 			//default
 		}
 		var uri = _conf.node + '/api/delegates/forging/getForgedByAccount?generatorPublicKey=' + _conf.pubkey;
-		var d = await request.get({url: uri,  json: true,	method: 'GET'});
+		var d = await request.get({ url: uri, json: true, method: 'GET' });
 		if (d) {
 			if (d.success) {
 				logger.debug('Response Forged: ' + JSON.stringify(d, null, 4));
 				var lf = _log.lastforged;
 				rew = d.rewards;
-				_log.lastforged = rew; 
+				_log.lastforged = rew;
 				rew = rew - lf;
 				logger.debug('Rew: ' + rew + ' ' + _conf.coin);
 				forged = (rew / 100000000) * _conf.percentage / 100;
 				logger.debug('To distribute: ' + forged + ' ' + _conf.coin);
 				if (forged > 0.1) {
 					uri = _conf.node + '/api/delegates/voters?publicKey=' + _conf.pubkey;
-					d = await request.get({url: uri,  json: true,	method: 'GET'});
+					d = await request.get({ url: uri, json: true, method: 'GET' });
 					if (d) {
 						if (d.success) {
 							logger.debug('Response Voters: ' + JSON.stringify(d, null, 4));
@@ -206,12 +286,12 @@ async function estimatePayouts(_conf, _log) {
 								if ((d.accounts[i].balance !== '0') && !(_conf.skip.includes(d.accounts[i].address))) {
 									var _address = d.accounts[i].address;
 									var _balance = (parseFloat(d.accounts[i].balance) / 100000000 * forged) / weight;
-									payouts.push({ address: _address, balance: _balance});
+									payouts.push({ address: _address, balance: _balance });
 									logger.debug(_address + ' ' + _balance);
 								}
 							}
 						}
-					}	
+					}
 				}
 			}
 		}
