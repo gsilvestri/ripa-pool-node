@@ -1,10 +1,11 @@
 const fs = require('fs');
+const readlineSync = require('readline-sync');
 const request = require('request-promise');
 const DEFAULT_CONFIG = 'config.json';
-const DEFAULT_POOLLOGS = 'poollogs.json';
+const DEFAULT_POOLLOGS = 'docs/poollogs.json';
 const DEFAULT_PAYMENTS = 'payments.json';
 var logger = require('winston');
-logger.level = 'debug';
+logger.level = 'info';
 var config = require('./' + DEFAULT_CONFIG);
 var poollogs = require('./' + DEFAULT_POOLLOGS);
 var payments = require('./' + DEFAULT_PAYMENTS);
@@ -16,10 +17,14 @@ async function pool() {
 	var configFilename = DEFAULT_CONFIG;
 	var poollogsFilename = DEFAULT_POOLLOGS;
 	var paymentsFilename = DEFAULT_PAYMENTS;
+	var autosave = false;
 	for (let j = 0; j < process.argv.length; j++) {  
 		logger.debug(j + ' -> ' + (process.argv[j]));
 		if (process.argv[j] === '-c') {
 			configFilename = process.argv[j + 1];
+		}
+		if (process.argv[j] === '-y') {
+			autosave = true
 		}
 	}
 	if (configFilename !== DEFAULT_CONFIG) {
@@ -44,11 +49,11 @@ async function pool() {
 		}
 	}
 	logger.info('Config Filename: ' + configFilename);
-	logger.debug('Config: ' + JSON.stringify(config));
+	logger.debug('Config: ' + JSON.stringify(config, null, 4));
 	logger.info('Poollogs Filename: ' + poollogsFilename);
-	logger.debug('Poollogs: ' + JSON.stringify(poollogs));
+	logger.debug('Poollogs: ' + JSON.stringify(poollogs, null, 4));
 	var estimatePayoutsResult = await estimatePayouts(config, poollogs);
-	logger.info('Result pool(): ' + JSON.stringify(estimatePayoutsResult));
+	logger.debug('Result pool(): ' + JSON.stringify(estimatePayoutsResult, null, 4));
 	var payouts = estimatePayoutsResult.payouts;
 	var log = estimatePayoutsResult.log;
 	var forged = estimatePayoutsResult.forged;
@@ -59,7 +64,7 @@ async function pool() {
 			payments.transactionsPending = [];
 			payments.donations = [];
 			payments.donationsPercentage = [];
-			logger.debug('Payments: ' + JSON.stringify(payments));
+			logger.debug('Payments: ' + JSON.stringify(payments, null, 4));
 			for (var i = 0; i < payouts.length; i++) {
 				var address = payouts[i].address;
 				var balance = payouts[i].balance;
@@ -87,17 +92,28 @@ async function pool() {
 					payments.donations.push({recipientId: y, amount: log.accounts[y] * 100000000});
 				}	
 			}
-			if (config.donationsPercentage) {
-				for (var y in config.donationsPercentage) {
+			if (config.donationspercentage) {
+				for (var y in config.donationspercentage) {
 					var am = forged * config.donationspercentage[y] / 100;
 					payments.donationsPercentage.push({recipientId: y, amount: am * 100000000});
 				}	
 			}
 			log.lastpayout = Math.floor(Date.now() / 1000);
-			//write poollogs.json file 
-			saveLog(log, poollogsFilename);
-			//write payments.json file
-			saveLog(payments, paymentsFilename);
+			var save = false;
+			if (autosave) {
+				save = true;
+			} else {
+				var reply = readlineSync.question('Do You want to save the file? ');
+				if (reply.toLowerCase() === 'y') {
+					save = true;
+				}
+			}
+			if (save) {
+				//write poollogs.json file 
+				saveLog(log, poollogsFilename);
+				//write payments.json file
+				saveLog(payments, paymentsFilename);
+			}
 		} else {
 			logger.info('Nothing to distribute, exiting...');
 		} 
@@ -108,10 +124,10 @@ async function pool() {
 
 function saveLog(_file, _fileName) {
 
-	const jsonString = JSON.stringify(_file);
+	const jsonString = JSON.stringify(_file, null, 4);
 	logger.debug('Saving Filename: ' + _fileName);
 	logger.debug('Saving File: ' + jsonString);
-	//fs.writeFileSync('./' + _fileName, jsonString);
+	fs.writeFileSync('./' + _fileName, jsonString);
 }
 
 async function estimatePayouts(_conf, _log) {
@@ -131,7 +147,7 @@ async function estimatePayouts(_conf, _log) {
 		var d = await request.get({url: uri,  json: true,	method: 'GET'});
 		if (d) {
 			if (d.success) {
-				logger.debug('Response Forged: ' + JSON.stringify(d));
+				logger.debug('Response Forged: ' + JSON.stringify(d, null, 4));
 				var lf = _log.lastforged;
 				rew = d.rewards;
 				_log.lastforged = rew; 
@@ -144,7 +160,7 @@ async function estimatePayouts(_conf, _log) {
 					d = await request.get({url: uri,  json: true,	method: 'GET'});
 					if (d) {
 						if (d.success) {
-							logger.debug('Response Voters: ' + JSON.stringify(d));
+							logger.debug('Response Voters: ' + JSON.stringify(d, null, 4));
 							weight = 0.0;
 							payouts = [];
 							for (var i = 0; i < d.accounts.length; i++) {
@@ -170,7 +186,7 @@ async function estimatePayouts(_conf, _log) {
 		result.log = _log;
 		result.forged = forged;
 	}
-	logger.debug('Result estimatePayouts(): ' + JSON.stringify(result));
+	logger.debug('Result estimatePayouts(): ' + JSON.stringify(result, null, 4));
 	return result;
 }
 
@@ -178,8 +194,7 @@ async function estimatePayouts(_conf, _log) {
 /*
 	
 def pool ():			
-	print (json.dumps (log, indent=4, separators=(',', ': ')))
-	
+
 	if len (sys.argv) > 1 and sys.argv[1] == '-y':
 		print ('Saving...')
 		saveLog (log)
