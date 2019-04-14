@@ -8,7 +8,7 @@ const DEFAULT_POOLLOGS = 'docs/poollogs.json';
 const DEFAULT_PAYMENTS = 'payments.json';
 const DEFAULT_PASSPHRASES = 'passphrases.json';
 var logger = require('winston');
-logger.level = 'debug';
+logger.level = 'info';
 var config = require('./' + DEFAULT_CONFIG);
 var poollogs = require('./' + DEFAULT_POOLLOGS);
 var payments = require('./' + DEFAULT_PAYMENTS);
@@ -225,8 +225,8 @@ async function pool() {
 				saveLog(log, poollogsFilename);
 				//write payments.json file
 				saveLog(payments, paymentsFilename);
+				broadcastPayments(config, payments, passphrases, passphrasesFilename, autosave);
 			}
-			broadcastPayments(config, payments, passphrases, passphrasesFilename, autosave);
 		} else {
 			logger.info('Nothing to distribute, exiting...');
 		}
